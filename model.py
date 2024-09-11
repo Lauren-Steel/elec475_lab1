@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
-# testing git
+# testing - emily dev
 
 class autoencoderMLP4Layer(nn.Module):
     
