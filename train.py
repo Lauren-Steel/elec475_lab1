@@ -115,12 +115,32 @@ def main():
     model.apply(init_weights)
     summary(model, model.input_shape)
 
+    # Load MNIST data
     train_transform = transforms.Compose([
         transforms.ToTensor()
     ])
     test_transform = train_transform
 
     train_set = MNIST('./data/mnist', train=True, download=True, transform=train_transform)
+    
+    # ** 2. Visualizing the MNIST Dataset
+    # prompt the user for an index after loading the train_set
+    while True:
+        try:
+            idx = int(input("Enter an index between 0 and 59999: "))
+            if 0 <= idx <= 59999:
+                break
+            else:
+                print("Invalid index. Please enter a number between 0 and 59999.")
+        except ValueError:
+            print("Invalid input. Please enter an integer.")
+
+    # display the image and its label
+    plt.imshow(train_set.data[idx], cmap='gray')
+    plt.title(f'Label: {train_set.targets[idx]}')
+    plt.show()
+    
+    
     test_set = MNIST('./data/mnist', train=False, download=True, transform=test_transform)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
