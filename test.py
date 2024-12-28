@@ -1,11 +1,6 @@
 
-#########################################################################################################
-#
-#   ELEC 475 - Lab 1, Step 1
-#   Fall 2023
-#
-
 import torch
+import random
 import torchvision.transforms as transforms
 import argparse
 import matplotlib.pyplot as plt
@@ -13,17 +8,116 @@ import numpy as np
 from torchvision.datasets import MNIST
 from model import autoencoderMLP4Layer
 
-# Linear interpolations function
+# 4. Test Autoencoder
+def test_autoencoder(model, idx, test_set, device):
+    print("Testing Autoencoder")
+    
+    model.eval()
+    
+    if 0 <= idx <= test_set.data.size()[0]:
+        print('label = ', test_set.targets[idx].item())
+
+        # Retrieves image data 
+        img = test_set.data[idx]
+
+        # Converts the image data to torch.float32
+        img = img.type(torch.float32)
+
+        # Normalizes the image data to the range [0, 1]
+        img = (img - torch.min(img)) / torch.max(img)
+
+        img = img.to(device=device)
+
+        # Reshapes image data to format suitable for the model input: [1, 784] and torch.float32
+        img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
+
+        # Performs inference using the model to get reconstructed output
+        # Ensures no gradients are computed during inference - saves memory and computation
+        with torch.no_grad():
+            output = model(img)
+
+        # Reshapes output to original image dimensions
+        output = output.view(28, 28).type(torch.FloatTensor)
+
+
+        img = img.view(28, 28).type(torch.FloatTensor)
+
+        f = plt.figure()
+        f.add_subplot(1,2,1)
+        plt.imshow(img, cmap='gray')
+        f.add_subplot(1,2,2)
+        plt.imshow(output, cmap='gray')
+        plt.show()
+
+
+
+# 5. Denoising Image
+def denoise_image(model, idx, test_set, device, noise_level=0.3):
+    print("Denoising Image")
+
+    model.eval()
+    if 0 <= idx <= test_set.data.size()[0]:
+        # Retrieves image data 
+        img = test_set.data[idx]
+        img = img.type(torch.float32)
+        img = (img - torch.min(img)) / torch.max(img)
+        img = img.to(device=device)
+
+        # Reshapes image data to format suitable for the model input: [1, 784] and torch.float32
+        img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
+
+        # Add uniform noise to the image
+        noisy_img = img + noise_level * torch.rand(img.size()).to(device)
+        noisy_img = torch.clamp(noisy_img, 0.0, 1.0)
+
+        # Pass the noisy image through the autoencoder
+        with torch.no_grad():
+            output = model(noisy_img.view(1, -1))
+
+
+        # Reshapes output to original image dimensions
+        output = output.view(28, 28).type(torch.FloatTensor)
+        noisy_img = noisy_img.view(28, 28).type(torch.FloatTensor)
+
+
+        img = img.view(28, 28).type(torch.FloatTensor)
+
+
+        f = plt.figure()
+        f.add_subplot(1, 3, 1)  # 3 subplots now: original, noisy, reconstructed
+        plt.imshow(img.cpu(), cmap='gray')
+        plt.title("Original")
+        f.add_subplot(1, 3, 2)
+        plt.imshow(noisy_img.cpu(), cmap='gray')
+        plt.title("Noisy")
+        f.add_subplot(1, 3, 3)
+        plt.imshow(output.cpu(), cmap='gray')
+        plt.title("Reconstructed")
+        plt.show()
+
+
+
+            
+
+
+
+
+
+# 6. Bottleneck Interpolation - linear interpolations function
 def interpolate(model, test_loader, device, steps):
+    print("Bottleneck Interpolation")
     model.eval()
 
     # encode images to get their bottleneck representations
     with torch.no_grad():
         fig, axs = plt.subplots(3, steps + 2, figsize=(15, 8))
-        for idx, (imgs, _) in enumerate(test_loader):
+        shuffled_data = torch.utils.data.DataLoader(test_loader.dataset, batch_size=test_loader.batch_size, shuffle=True)
+
+        for idx, (imgs, _) in enumerate(shuffled_data):
             if idx >= 3:  # To ensure we only plot for three batches to fit our 3xN grid
                 break
-            
+                     
+           
             img1, img2 = imgs[0], imgs[1]
             # reshape images to (1, 784) and send to device
             img1 = img1.view(1, -1).to(device)
@@ -53,8 +147,7 @@ def interpolate(model, test_loader, device, steps):
 
 
 
-def main():
-
+if __name__ == '__main__':
     print('running main ...')
 
     #   read arguments from command line
@@ -84,9 +177,7 @@ def main():
     ])
     test_transform = train_transform
 
-    train_set = MNIST('./data/mnist', train=True, download=True, transform=train_transform)
     test_set = MNIST('./data/mnist', train=False, download=True, transform=test_transform)
-    # train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
     N_input = 28 * 28   # MNIST image size
@@ -94,105 +185,21 @@ def main():
     model = autoencoderMLP4Layer(N_input=N_input, N_bottleneck=bottleneck_size, N_output=N_output)
     model.load_state_dict(torch.load(save_file)) # loads pretrained weights
     model.to(device)
-    model.eval()
+    
 
+    idx = random.sample(range(len(test_set)), 1)
+    idx = idx[0]
+    print(f"Index: {idx}")
+
+    # Step 4
+    test_autoencoder(model, idx, test_set, device)
+    
+    # Step 5
+    denoise_image(model, idx, test_set, device)
+
+    # Step 6
     interpolate(model, test_loader, device, steps=8)
 
-
-    # idx = 0
-    # while idx >= 0:
-    #     idx = input("Enter index > ")
-    #     idx = int(idx)
-    #     if 0 <= idx <= train_set.data.size()[0]:
-    #         print('label = ', train_set.targets[idx].item())
-
-    #         # Retrieves image data 
-    #         img = train_set.data[idx]
-    #         print('break 9', img.shape, img.dtype, torch.min(img), torch.max(img))
-
-    #         # Converts the image data to torch.float32
-    #         img = img.type(torch.float32)
-    #         print('break 10', img.shape, img.dtype, torch.min(img), torch.max(img))
-
-    #         # Normalizes the image data to the range [0, 1]
-    #         img = (img - torch.min(img)) / torch.max(img)
-    #         print('break 11', img.shape, img.dtype, torch.min(img), torch.max(img))
-
-    #         # plt.imshow(img, cmap='gray')
-    #         # plt.show()
-    #         img = img.to(device=device)
-
-    #         # print('break 7: ', torch.max(img), torch.min(img), torch.mean(img))
-    #         print('break 8 : ', img.shape, img.dtype)
-
-    #         # Reshapes image data to format suitable for the model input: [1, 784] and torch.float32
-    #         img = img.view(1, img.shape[0]*img.shape[1]).type(torch.FloatTensor)
-    #         print('break 9 : ', img.shape, img.dtype)
-
-    #         # ** 5. Image Denoising
-    #         # Add uniform noise to the image
-    #         noise_level = 0.3  # Adjust this to control the amount of noise
-    #         noisy_img = img + noise_level * torch.rand(img.size()).to(device)
-    #         noisy_img = torch.clamp(noisy_img, 0.0, 1.0)
-
-    #         # Performs inference using the model to get reconstructed output
-    #         # Ensures no gradients are computed during inference - saves memory and computation
-    #         # with torch.no_grad():
-    #         #     output = model(img)
-    #         # Pass the noisy image through the autoencoder
-    #         with torch.no_grad():
-    #             output = model(noisy_img.view(1, -1))
-
-    #         # output = output.view(28, 28).type(torch.ByteTensor)
-    #         # output = output.view(28, 28).type(torch.FloatTensor)
-                
-    #         # Reshapes output to original image dimensions
-    #         output = output.view(28, 28).type(torch.FloatTensor)
-    #         noisy_img = noisy_img.view(28, 28).type(torch.FloatTensor)
-
-
-    #         print('break 10 : ', output.shape, output.dtype)
-    #         print('break 11: ', torch.max(output), torch.min(output), torch.mean(output))
-    #         # plt.imshow(output, cmap='gray')
-    #         # plt.show()
-
-    #         # both = np.hstack((img.view(28, 28).type(torch.FloatTensor),output))
-    #         # plt.imshow(both, cmap='gray')
-    #         # plt.show()
-
-    #         img = img.view(28, 28).type(torch.FloatTensor)
-
-    #         # Displays the original and reconstructed image
-    #         # f = plt.figure()
-    #         # f.add_subplot(1,2,1)
-    #         # plt.imshow(img, cmap='gray')
-    #         # f.add_subplot(1,2,2)
-    #         # plt.imshow(output, cmap='gray')
-    #         # plt.show()
-
-    #         f = plt.figure()
-    #         f.add_subplot(1, 3, 1)  # 3 subplots now: original, noisy, reconstructed
-    #         plt.imshow(img.cpu(), cmap='gray')
-    #         plt.title("Original")
-    #         f.add_subplot(1, 3, 2)
-    #         plt.imshow(noisy_img.cpu(), cmap='gray')
-    #         plt.title("Noisy")
-    #         f.add_subplot(1, 3, 3)
-    #         plt.imshow(output.cpu(), cmap='gray')
-    #         plt.title("Reconstructed")
-    #         plt.show()
-            
-
-            
-
-
-
-
-
-###################################################################
-
-if __name__ == '__main__':
-    main()
 
 
 
